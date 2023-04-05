@@ -1,0 +1,6 @@
+Groupe : Marina, Anisse, Lucas.
+
+https://github.com/marina15082002/Projet-Annuel-3-Big-Data.git
+
+Projet basé sur la détéction de fruits sur des photos.
+Dataset constitué de 4 classes (bananes, oranges, pommes, autres). -> réalisé à 80%.
