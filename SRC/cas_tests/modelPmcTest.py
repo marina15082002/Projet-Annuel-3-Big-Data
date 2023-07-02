@@ -246,4 +246,4 @@ def executeTest(test):
         print("Error")
 
 
-executeTest(4)
+executeTest(3)

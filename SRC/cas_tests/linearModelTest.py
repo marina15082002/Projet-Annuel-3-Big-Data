@@ -14,7 +14,7 @@ B = np.array([
 ])
 
 C = np.concatenate(
-    [np.random.random((50, 2)) * 0.9 + np.array([1, 1]), np.random.random((50, 2)) * 0.9 + np.array([2, 2])])
+    [np.random.random((50, 2)) * 0.9 + np.array([1, 1]), np.random.random((50, 2)) * 0.9 + np.array([0.5, 2])])
 D = np.concatenate([np.ones((50, 1)), np.ones((50, 1)) * -1.0])
 
 E = np.array([[1, 0], [0, 1], [0, 0], [1, 1]])
@@ -218,7 +218,7 @@ def executeTest(test):
         showValue()
     elif test == 6:
         W = np.random.uniform(-1, 1, 3)
-        predicted_x1, predicted_x2, predicted_labels = linearModelMultiClass(initW1(L, K, W), initW2(L, K, W),initW3(L, K, W))
+        predicted_x1, predicted_x2, predicted_labels = linearModelMultiClass(initWMultiClass(L, K, 0,W), initWMultiClass(L, K, 1, W),initWMultiClass(L, K, 2, W))
         plt.scatter(predicted_x1, predicted_x2, c=predicted_labels)
         plt.scatter(np.array(list(map(lambda elt: elt[1], filter(lambda c: L[c[0]][0] == 1, enumerate(K)))))[:, 0],
                     np.array(list(map(lambda elt: elt[1], filter(lambda c: L[c[0]][0] == 1, enumerate(K)))))[:, 1],
@@ -270,4 +270,4 @@ def executeTest(test):
         print("Error")
 
 
-executeTest(5)
+executeTest(7)

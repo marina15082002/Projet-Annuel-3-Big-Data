@@ -57,5 +57,6 @@ extern "C" fn predict_labels(points: *const f32, labels: *const f32, points_len:
 
         //let tab_ptr = Box::into_raw(Box::new(tab));
         //tab_ptr
-        tab2.as_mut_ptr()
+        //tab2.as_mut_ptr()
+    0 as *mut *mut f32
    }
