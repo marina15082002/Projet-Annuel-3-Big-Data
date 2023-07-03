@@ -132,40 +132,47 @@ mlp = creatMLP(npl, len(npl))
 
 
 def initW(images, labels, randW):
-    num_pixels = images.shape[1] + 1  # Nombre de pixels dans une image + 1 pour la constante
-    num_classes = labels.shape[1]  # Nombre de classes
+    num_classes = labels.shape[1]
+    W = np.random.uniform(-1, 1, (num_classes, images.shape[1] + 1))
 
-    W = np.random.uniform(-1, 1, (num_classes, num_pixels))
     for _ in range(10000):
         k = np.random.randint(0, len(labels))
         Yk = labels[k] - 0.5  # Étiquettes ajustées à l'intervalle [-0.5, 0.5]
-        Xk = np.concatenate(([1], images[k]))  # Ajoute une valeur constante (1) à l'image
-        Xk = Xk.reshape((1, -1))  # Reshape pour aligner les dimensions avec W
-        signal = np.dot(Xk, W.T)
+        Xk = np.concatenate(([1], images[k]))  # Pixels de l'image
+        signal = np.dot(W, Xk)
         gXk = np.where(signal >= 0, 1.0, -1.0)
-        W = W + 0.01 * np.dot((Yk - gXk).T, Xk)
+        W = W + 0.01 * np.outer(Yk - gXk, Xk)
 
     return W
 
-def linearModel(W, image_size):
-    class_colors = ['lightskyblue', 'pink', 'green', 'purple']
+def linearModel(W, images):
+    class_labels = ['Pommes', 'Bananes', 'Oranges', 'Autres']
     predicted_scores = []
-    for row in range(image_size[0]):
-        for col in range(image_size[1]):
-            pixel = np.array([1, row, col])  # Coordonnées du pixel dans l'image (ajout de 1 pour la constante)
-            score = np.dot(pixel, W.T)
-            predicted_scores.append(score.tolist())  # Ajoute le score complet à la liste
+
+    for image in images:
+        scores = np.dot(W, np.concatenate(([1], image)))
+        exp_scores = np.exp(scores)
+        probabilities = exp_scores / (np.sum(exp_scores) + np.finfo(float).eps) * 100
+        predicted_scores.append(probabilities.tolist())
 
     return predicted_scores
 
 # Exemple d'utilisation
 
 
-W = initW(pixels, expected, 3)
-scores = linearModel(W, (150, 150))
+W = initW(pixels, expected, randW=True)
+scores = linearModel(W, pixels)
 
 print("linear model : ")
-print(scores)
+print(scores[len(scores) - 351])
+
+print("expected : ")
+print(expected[len(expected) - 351])
+
+# affichier la première image de pixels
+plt.imshow(pixels[len(expected) - 351].reshape((150, 150, 3)))
+plt.show()
+
 
 
 
