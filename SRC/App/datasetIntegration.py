@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import os
 import random
+from typing import List
 
 bananes = "Bananes"
 pommes = "Pommes"
@@ -57,6 +58,9 @@ def rename(name, namefile):
             new_path = os.path.join(output_dir, new_name)
             # renommer le fichier
             os.rename(source_path, new_path)
+
+            with Image.open(new_path) as img:
+                img.resize((32, 32))
             # incrementer de compteur
             num += 1
 
@@ -85,7 +89,10 @@ def allcolors(directory):
     all_pixels = []
     for filename in os.listdir(directory):
         if filename.endswith(".jpg"):
-            img = Image.open(os.path.join(directory, filename))
+            path = os.path.join(directory, filename)
+            img = Image.open(path)
+            img_resized = img.resize((32, 32))
+            img_resized.save(path)
             if img.mode != "RGB":
                 print(f"Le fichier {filename} n'est pas en RGB")
                 img = img.convert("RGB")
@@ -94,6 +101,7 @@ def allcolors(directory):
                 r, g, b = pixel
                 pixel_list.extend([r / 255, g / 255, b / 255])
             all_pixels.append(pixel_list)
+            img.close()
     if all_pixels:
         all_pixels = np.array(all_pixels, dtype=np.double)
         return all_pixels.reshape((all_pixels.shape[0], -1))
@@ -131,7 +139,7 @@ npl = [3, 4, 1]  # Couches du réseau de neurones
 mlp = creatMLP(npl, len(npl))
 
 
-def initW(images, labels, randW):
+def initW(images, labels):
     num_classes = labels.shape[1]
     W = np.random.uniform(-1, 1, (num_classes, images.shape[1] + 1))
 
@@ -146,7 +154,6 @@ def initW(images, labels, randW):
     return W
 
 def linearModel(W, images):
-    class_labels = ['Pommes', 'Bananes', 'Oranges', 'Autres']
     predicted_scores = []
 
     for image in images:
@@ -160,34 +167,172 @@ def linearModel(W, images):
 # Exemple d'utilisation
 
 
-W = initW(pixels, expected, randW=True)
+W = initW(pixels, expected)
 scores = linearModel(W, pixels)
-
+"""
 print("linear model : ")
-print(scores[len(scores) - 351])
+print(scores[len(scores) - 180])
 
 print("expected : ")
-print(expected[len(expected) - 351])
+print(expected[len(expected) - 180])
 
 # affichier la première image de pixels
-plt.imshow(pixels[len(expected) - 351].reshape((150, 150, 3)))
+plt.imshow(pixels[len(expected) - 180].reshape((150, 150, 3)))
 plt.show()
+"""
+
+class myMLP:
+    def __init__(self, npl: List[int]):
+        self.d = npl
+        self.L = len(npl) - 1
+        self.W = []
+
+        for l in range(self.L + 1):
+            self.W.append([])
+
+            if l == 0:
+                continue
+            for i in range(npl[l - 1] + 1):
+                self.W[l].append([])
+                for j in range(npl[l] + 1):
+                    self.W[l][i].append(0.0 if j == 0 else np.random.uniform(-1.0, 1.0))
+
+        self.X = []
+        for l in range(self.L + 1):
+            self.X.append([])
+            for j in range(npl[l] + 1):
+                self.X[l].append(1.0 if j == 0 else 0.0)
+
+        self.deltas = []
+        for l in range(self.L + 1):
+            self.deltas.append([])
+            for j in range(npl[l] + 1):
+                self.deltas[l].append(0.0)
 
 
+    def _propagate(self, inputs: List[float], is_classification: bool):
+        for j in range(self.d[0]):
+            self.X[0][j + 1] = inputs[j]
+
+        for l in range(1, self.L + 1):
+            for j in range(1, self.d[l] + 1):
+                total = 0.0
+                for i in range(0, self.d[l - 1] + 1):
+                    total += self.W[l][i][j] * self.X[l - 1][i]
+
+                if l < self.L or is_classification:
+                    total = np.tanh(total)
+
+                self.X[l][j] = total
 
 
+    def predict(self, inputs: List[float], is_classification: bool):
+        self._propagate(inputs, is_classification)
+        return self.X[self.L][1:]
 
-# créer une liste vide
 
-# dataset = []  # Créer une liste vide pour stocker les sous-tableaux d'images
-# nameFile = r"C:\Users\marin\Documents\3IABD\PA\Projet-Annuel-3-Big-Data\Dataset\Dataset\Pommes\image_"
-# i = 1
-#
-# while os.path.exists(nameFile + str(i) + ".jpg"):
-#     im = Image.open(nameFile + str(i) + ".jpg")
-#     image = np.array(im) / 255.0  # / 255.0 pour normaliser les valeurs des pixels entre 0 et 1
-#     tabImage = image.flatten()
-#     dataset.append(tabImage)
-#     i += 1
-#
-# dataset = np.array(dataset)  # Convertir la liste en tableau numpy
+    def train(self, all_samples_inputs: List[List[float]], all_samples_expected_outputs: List[List[float]],
+              is_classification: bool, iteration_count: int, alpha: float):
+        for it in range(iteration_count):
+            k = np.random.randint(0, len(all_samples_inputs))
+            inputs_k = all_samples_inputs[k]
+            y_k = all_samples_expected_outputs[k]
+
+            self._propagate(inputs_k, is_classification)
+
+            for j in range(1, self.d[self.L] + 1):
+                self.deltas[self.L][j] = (self.X[self.L][j] - y_k[j - 1])
+                if is_classification:
+                    self.deltas[self.L][j] *= (1 - self.X[self.L][j] ** 2)
+
+            for l in reversed(range(1, self.L + 1)):
+                for i in range(1, self.d[l - 1] + 1):
+                    total = 0.0
+                    for j in range(1, self.d[l] + 1):
+                        total += self.W[l][i][j] * self.deltas[l][j]
+                    self.deltas[l - 1][i] = (1 - self.X[l - 1][i] ** 2) * total
+
+            for l in range(1, self.L + 1):
+                for i in range(0, self.d[l - 1] + 1):
+                    for j in range(1, self.d[l] + 1):
+                        self.W[l][i][j] -= alpha * self.X[l - 1][i] * self.deltas[l][j]
+
+
+mlp = myMLP([32*32*3, 10, 4])  # Création d'une instance du modèle MLP avec les couches spécifiées
+
+# Entraînement du modèle avec des données d'entraînement
+mlp.train(pixels, expected, True, 1000, 0.01)
+"""
+# Prédiction sur une image
+prediction = mlp.predict(pixels[len(pixels) - 180], True)
+print(prediction)
+print("expected : ")
+print(expected[len(expected) - 180])
+"""
+
+
+class RBFModel:
+    def __init__(self, num_classes, num_centers, gamma):
+        self.num_classes = num_classes
+        self.num_centers = num_centers
+        self.gamma = gamma
+        self.centers = None
+        self.weights = None
+
+    def fit(self, X, y):
+        # Sélection aléatoire des centres
+        random_indices = np.random.choice(X.shape[0], size=self.num_centers, replace=False)
+        self.centers = X[random_indices]
+
+        # Calcul des activations pour chaque échantillon
+        activations = self.calculate_activations(X)
+
+        # Ajout d'une colonne de biais aux activations
+        activations_bias = np.hstack((np.ones((X.shape[0], 1)), activations))
+
+        self.weights = np.zeros((activations_bias.shape[1], y.shape[1]))
+
+        for i in range(activations_bias.shape[1]):
+            for j in range(y.shape[1]):
+                total = 0.0
+                for k in range(activations_bias.shape[0]):
+                    total += activations_bias[k, i] * y[k, j]
+                self.weights[i, j] = total
+
+        # Mise à l'échelle des poids entre 0 et 100
+        max_weight = np.max(self.weights)
+        min_weight = np.min(self.weights)
+        self.weights = 100 * (self.weights - min_weight) / (max_weight - min_weight)
+
+    def predict(self, X):
+        activations = self.calculate_activations(X)
+        activations_bias = np.hstack((np.ones((X.shape[0], 1)), activations))
+        predictions = activations_bias @ self.weights
+        return predictions
+
+    def calculate_activations(self, X):
+        num_samples = X.shape[0]
+        num_centers = self.centers.shape[0]
+        activations = np.zeros((num_samples, num_centers))
+
+        for i in range(num_samples):
+            for j in range(num_centers):
+                diff = X[i] - self.centers[j]
+                activations[i, j] = np.exp(-self.gamma * np.dot(diff, diff))
+
+        return activations
+
+num_classes = 4  # Nombre de classes (Pommes, Bananes, Oranges, Autres)
+num_centers = 10  # Nombre de centres RBF
+gamma = 0.1  # Paramètre gamma pour les fonctions de base radiales
+rbf_model = RBFModel(num_classes, num_centers, gamma)
+
+# Entraînement du modèle avec les données d'entraînement
+rbf_model.fit(pixels, expected)
+
+predictions = rbf_model.predict(pixels[0])
+percentages = predictions.flatten()
+print(percentages)
+
+print("expected : ")
+print(expected[0])
