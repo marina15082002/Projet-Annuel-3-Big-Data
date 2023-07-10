@@ -2,11 +2,18 @@ use rand::Rng;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::io::Write;
+use serde::{Serialize};
+use serde_json;
 
+#[derive(Serialize)]
 struct MLP {
+    /// Nombre de couches cachées
     L: usize,
+    /// Nombre de neurones
     d: Vec<usize>,
+    /// Weights of the network
     W: Vec<Vec<Vec<f32>>>,
+    /// Matrices d'activation
     X: Vec<Vec<f32>>,
     deltas: Vec<Vec<f32>>,
 }
@@ -22,6 +29,9 @@ extern "C" fn create_mlp(npl: &[usize]) -> MLP {
         X: vec![vec![0.0; 0]; 0],
         deltas: vec![vec![0.0; 0]; 0],
     };
+
+    let json_string = serde_json::to_string(&mlp).unwrap();
+    println!("{}", json_string);
 
     for i in 0..npl_size {
         mlp.d[i] = npl[i];
@@ -147,75 +157,44 @@ extern "C" fn propagate(mlp: &mut MLP, inputs: &[f32], is_classification: bool) 
 
 #[no_mangle]
 extern "C" fn load_model() -> Option<Box<MLP>> {
-    if let Ok(mut file) = File::open("model.txt") {
-        let mut mlp = MLP {
-            L: 0,
-            d: Vec::new(),
-            W: Vec::new(),
-            X: Vec::new(),
-            deltas: Vec::new(),
-        };
-
-        let mut reader = BufReader::new(&mut file);
-
-        if let Some(Ok(line)) = reader.lines().next() {
-            if let Ok(L) = line.parse() {
-                mlp.L = L;
-            } else {
-                println!("Erreur lors de la lecture de la valeur L.");
-                return None;
-            }
-        } else {
-            println!("Erreur lors de la lecture de la valeur L.");
+    let mut file = match File::open("model.txt") {
+        Ok(file) => file,
+        Err(e) => {
+            println!("Erreur lors de l'ouverture du fichier model.txt : {}", e);
             return None;
         }
+    };
 
-        let mut position = reader.seek(SeekFrom::Current(0)).unwrap();
+    let reader = BufReader::new(&mut file);
+    let mut lines = reader.lines();
 
-        for line in reader.lines().take(mlp.L + 1) {
-            if let Ok(line) = line {
-                let values: Vec<usize> = line
-                    .split_whitespace()
-                    .map(|s| s.parse().unwrap())
-                    .collect();
-                mlp.d.extend(values);
-            } else {
-                println!("Erreur lors de la lecture de la valeur d.");
-                return None;
-            }
+    let L: usize = lines
+        .next().expect("Valeur L manquante.").unwrap()
+        .parse().expect("L doit être un nombre.");
+
+    let d: Vec<usize> = lines
+        .next().expect("Valeur D manquante.").unwrap()
+        .split_whitespace()
+        .map(|s| s.parse().expect("Les valeurs dans D doivent être des nombres"))
+        .collect();
+
+    let mut W = vec![Vec::new(); L];
+    for i in 0..L {
+        for _ in 0..d[i + 1] {
+            let line = lines.next().expect("Valeur W manquante.").unwrap();
+            let weights: Vec<f32> = line.split_whitespace()
+                .map(|s| s.parse().expect("Les valeurs dans W doivent être des flottants"))
+                .collect();
+            W[i].push(weights);
         }
-
-        reader.seek(SeekFrom::Start(position)).unwrap();
-
-        mlp.W = vec![Vec::new(); mlp.L];
-        mlp.X = vec![Vec::new(); mlp.L + 1];
-        mlp.deltas = vec![Vec::new(); mlp.L];
-
-        for i in 0..mlp.L {
-            for line in reader.lines().take(mlp.d[i + 1]) {
-                if let Ok(line) = line {
-                    let weights: Vec<f32> = line
-                        .split_whitespace()
-                        .map(|s| s.parse().unwrap())
-                        .collect();
-                    mlp.W[i].push(weights);
-                } else {
-                    println!("Erreur lors de la lecture des poids.");
-                    return None;
-                }
-            }
-            position = reader.seek(SeekFrom::Current(0)).unwrap();
-        }
-
-        for i in 0..=mlp.L {
-            mlp.X[i] = vec![0.0; mlp.d[i] + 1];
-        }
-
-        return Some(Box::new(mlp));
-    } else {
-        println!("Erreur lors de l'ouverture du fichier model.txt");
-        return None;
     }
+
+    let mut X = vec![Vec::new(); L + 1];
+    for i in 0..=L {
+        X[i] = vec![0.0; d[i] + 1];
+    }
+
+    Some(Box::new(MLP { L, d, W, X, deltas: vec![Vec::new(); L] }))
 }
 
 #[no_mangle]
@@ -242,4 +221,53 @@ extern "C" fn save_model(mlp: &MLP) {
     } else {
         println!("Erreur lors de l'ouverture du fichier model.txt");
     }
+}
+
+#[test]
+fn test_load_model() {
+    let model = load_model().unwrap();
+    println!("{:?}", model.d);
+}
+
+pub fn tab_to_string(tab: Vec<Vec<f32>>) -> String {
+    tab
+        .into_iter()
+        .map(|row| row
+            .into_iter()
+            .map(|value| value.to_string())
+            .collect::<Vec<_>>()
+            .join(" "))
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+pub fn string_to_tab(string: String) -> Vec<Vec<f32>> {
+    string
+        .split('\n')
+        .map(|row| row
+            .split(' ')
+            .map(|value| value.parse::<f32>().unwrap_or_else(|e| {
+                eprintln!("ERROR!! Echec de la conversion d'une valeur de tableau en flottant : {e}");
+                0.5
+            }))
+            .collect::<Vec<_>>())
+        .collect::<Vec<Vec<f32>>>()
+}
+
+#[test]
+fn test_serde() {
+    let mut tab = Vec::new();
+    for _ in 0..5 {
+        let mut row = Vec::new();
+        for i in 0..5 {
+            row.push(i as f32 / 10.);
+        }
+        tab.push(row);
+    }
+
+    let serialized = tab_to_string(tab.clone());
+    assert_eq!(serialized, "0 0.1 0.2 0.3 0.4\n0 0.1 0.2 0.3 0.4\n0 0.1 0.2 0.3 0.4\n0 0.1 0.2 0.3 0.4\n0 0.1 0.2 0.3 0.4");
+
+    let deserialized = string_to_tab(serialized);
+    assert_eq!(deserialized, tab);
 }
