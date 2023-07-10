@@ -1,12 +1,14 @@
 use rand::Rng;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::Write;
 
-#[no_mangle]
-extern "C" struct MLP {
+struct MLP {
     L: usize,
     d: Vec<usize>,
-    W: Vec<Vec<Vec<f64>>>,
-    X: Vec<Vec<f64>>,
-    deltas: Vec<Vec<f64>>,
+    W: Vec<Vec<Vec<f32>>>,
+    X: Vec<Vec<f32>>,
+    deltas: Vec<Vec<f32>>,
 }
 
 #[no_mangle]
@@ -33,7 +35,7 @@ extern "C" fn create_mlp(npl: &[usize]) -> MLP {
             mlp.W[i][j] = vec![0.0; mlp.d[i] + 1];
 
             for k in 0..mlp.d[i] + 1 {
-                mlp.W[i][j][k] = (rand::random::<f64>() / std::f64::MAX) * 2.0 - 1.0;
+                mlp.W[i][j][k] = (rand::random::<f32>() / std::f32::MAX) * 2.0 - 1.0;
             }
         }
     }
@@ -71,8 +73,7 @@ extern "C" fn train(mlp: &mut MLP, samples_inputs: &[f32], samples_expected_outp
         propagate(mlp, &samples_inputs[index * inputs_size..], is_classification);
 
         for j in 0..outputs_size {
-            mlp.deltas[mlp.L - 1][j] = (samples_expected_outputs[index * outputs_size + j] - mlp.X[mlp.L][j])
-                * mlp.X[mlp.L][j] * (1.0 - mlp.X[mlp.L][j]);
+            mlp.deltas[mlp.L - 1][j] = (samples_expected_outputs[index * outputs_size + j] - mlp.X[mlp.L][j]) * mlp.X[mlp.L][j] * (1.0 - mlp.X[mlp.L][j]);
             loss += (samples_expected_outputs[index * outputs_size + j] - mlp.X[mlp.L][j]).powi(2);
             if is_classification {
                 if (mlp.X[mlp.L][j].round() as i32) == (samples_expected_outputs[index * outputs_size + j] as i32) {
@@ -114,7 +115,7 @@ extern "C" fn train(mlp: &mut MLP, samples_inputs: &[f32], samples_expected_outp
         }
     }
 
-    //save_model(mlp);
+    save_model(mlp);
 
     loss
 }
@@ -142,4 +143,103 @@ extern "C" fn propagate(mlp: &mut MLP, inputs: &[f32], is_classification: bool) 
                 mlp.X[i][mlp.d[i]] = 1.0;
             }
         }
+}
+
+#[no_mangle]
+extern "C" fn load_model() -> Option<Box<MLP>> {
+    if let Ok(mut file) = File::open("model.txt") {
+        let mut mlp = MLP {
+            L: 0,
+            d: Vec::new(),
+            W: Vec::new(),
+            X: Vec::new(),
+            deltas: Vec::new(),
+        };
+
+        let mut reader = BufReader::new(&mut file);
+
+        if let Some(Ok(line)) = reader.lines().next() {
+            if let Ok(L) = line.parse() {
+                mlp.L = L;
+            } else {
+                println!("Erreur lors de la lecture de la valeur L.");
+                return None;
+            }
+        } else {
+            println!("Erreur lors de la lecture de la valeur L.");
+            return None;
+        }
+
+        let mut position = reader.seek(SeekFrom::Current(0)).unwrap();
+
+        for line in reader.lines().take(mlp.L + 1) {
+            if let Ok(line) = line {
+                let values: Vec<usize> = line
+                    .split_whitespace()
+                    .map(|s| s.parse().unwrap())
+                    .collect();
+                mlp.d.extend(values);
+            } else {
+                println!("Erreur lors de la lecture de la valeur d.");
+                return None;
+            }
+        }
+
+        reader.seek(SeekFrom::Start(position)).unwrap();
+
+        mlp.W = vec![Vec::new(); mlp.L];
+        mlp.X = vec![Vec::new(); mlp.L + 1];
+        mlp.deltas = vec![Vec::new(); mlp.L];
+
+        for i in 0..mlp.L {
+            for line in reader.lines().take(mlp.d[i + 1]) {
+                if let Ok(line) = line {
+                    let weights: Vec<f32> = line
+                        .split_whitespace()
+                        .map(|s| s.parse().unwrap())
+                        .collect();
+                    mlp.W[i].push(weights);
+                } else {
+                    println!("Erreur lors de la lecture des poids.");
+                    return None;
+                }
+            }
+            position = reader.seek(SeekFrom::Current(0)).unwrap();
+        }
+
+        for i in 0..=mlp.L {
+            mlp.X[i] = vec![0.0; mlp.d[i] + 1];
+        }
+
+        return Some(Box::new(mlp));
+    } else {
+        println!("Erreur lors de l'ouverture du fichier model.txt");
+        return None;
+    }
+}
+
+#[no_mangle]
+extern "C" fn save_model(mlp: &MLP) {
+    if let Ok(mut file) = File::create("model.txt") {
+        file.write_all(mlp.L.to_string().as_bytes()).unwrap();
+        file.write_all(b"\n").unwrap();
+
+        for i in 0..=mlp.L {
+            file.write_all(mlp.d[i].to_string().as_bytes()).unwrap();
+            file.write_all(b" ").unwrap();
+        }
+        file.write_all(b"\n").unwrap();
+
+        for i in 0..mlp.L {
+            for j in 0..mlp.d[i + 1] {
+                for k in 0..=mlp.d[i] {
+                    file.write_all(mlp.W[i][j][k].to_string().as_bytes()).unwrap();
+                    file.write_all(b" ").unwrap();
+                }
+                file.write_all(b"\n").unwrap();
+            }
+        }
+    } else {
+        println!("Erreur lors de l'ouverture du fichier model.txt");
+    }
 }
