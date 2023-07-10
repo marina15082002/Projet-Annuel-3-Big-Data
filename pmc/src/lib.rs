@@ -2,7 +2,7 @@ use rand::Rng;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::io::Write;
-use serde::{Serialize};
+use serde::{Serialize, Deserialize};
 use serde_json;
 
 #[derive(Serialize)]
@@ -19,7 +19,8 @@ struct MLP {
 }
 
 #[no_mangle]
-extern "C" fn create_mlp(npl: &[usize]) -> MLP {
+extern "C" fn create_mlp(npl_string: String) -> String {
+    let npl = serde_json::to_string(&npl_string).unwrap();
     let npl_size = npl.len();
 
     let mut mlp = MLP {
@@ -29,9 +30,6 @@ extern "C" fn create_mlp(npl: &[usize]) -> MLP {
         X: vec![vec![0.0; 0]; 0],
         deltas: vec![vec![0.0; 0]; 0],
     };
-
-    let json_string = serde_json::to_string(&mlp).unwrap();
-    println!("{}", json_string);
 
     for i in 0..npl_size {
         mlp.d[i] = npl[i];
@@ -54,20 +52,19 @@ extern "C" fn create_mlp(npl: &[usize]) -> MLP {
         mlp.X[i] = vec![0.0; mlp.d[i] + 1];
     }
 
-    mlp
+    json.dumps(mlp)
 }
 
 #[no_mangle]
-extern "C" fn predict(mlp: &mut MLP, inputs: &[f32], is_classification: bool, output: &mut [f32]) {
+extern "C" fn predict(mlp: &mut MLP, inputs: &[f32], is_classification: bool,output: &mut &[f32]) {
     if inputs.len() != mlp.d[0] {
         println!("Erreur : la taille des entrées ne correspond pas au nombre de neurones de la première couche.");
         return;
     }
 
     propagate(mlp, inputs, is_classification);
-
     let outputs = &mlp.X[mlp.L];
-    output.copy_from_slice(&outputs.iter().map(|&x| x as f32).collect::<Vec<f32>>());
+    output.copy_from_slice(&outputs.iter().map(|&x| x as f32).collect::<Vec<f32>>().as_slice());
 }
 
 #[no_mangle]
@@ -76,7 +73,6 @@ extern "C" fn train(mlp: &mut MLP, samples_inputs: &[f32], samples_expected_outp
     is_classification: bool, iteration_count: usize, alpha: f32) -> f32 {
     let mut loss = 0.0;
     let mut accuracy = 0.0;
-
     for i in 0..iteration_count {
         let index = rand::thread_rng().gen_range(0..samples_size);
 
