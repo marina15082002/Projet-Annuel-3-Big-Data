@@ -21,8 +21,17 @@ struct MLP {
 
 #[no_mangle]
 extern "C" fn create_mlp(npl_string: String) -> String {
-    let npl = serde_json::to_string(&npl_string).unwrap();
-    let npl_size = npl.len();
+    // transformer la string qui est en format json en objet json
+    let npl_json: Value = serde_json::from_str(&npl_string).unwrap();
+    let mut npl = MLP {
+        L: npl_json.L.parse::<usize>().unwrap(),
+        d: npl_json.d.parse::<Vec<usize>>().unwrap(),
+        W: npl_json.W.parse::<Vec<Vec<Vec<f32>>>>().unwrap(),
+        X: npl_json.X.parse::<Vec<Vec<f32>>>().unwrap(),
+        deltas: npl_json.deltas.parse::<Vec<Vec<f32>>>().unwrap(),
+    };
+    let ptr_npl = &mut npl;
+    let npl_size = ptr_npl.len();
 
     let mut mlp = MLP {
         L: npl_size - 1,
@@ -52,28 +61,43 @@ extern "C" fn create_mlp(npl_string: String) -> String {
     for i in 0..mlp.L + 1 {
         mlp.X[i] = vec![0.0; mlp.d[i] + 1];
     }
-    json.dumps(mlp)
+
+    serde_json::to_string(&mlp).unwrap()
 }
 
 #[no_mangle]
-extern "C" fn predict(mlp_string: String, inputs: &[f32], is_classification: bool,output: &mut &[f32]){
-    let mlp = serde_json::to_string(&mlp_string).unwrap();
+extern "C" fn predict(mlp_string: String, inputs: &[f32], is_classification: bool,output: &mut &[f32]) -> String {
+    let &mut mlp = MLP {
+        L: mlp_string.L.parse::<usize>().unwrap(),
+        d: mlp_string.d.parse::<Vec<usize>>().unwrap(),
+        W: mlp_string.W.parse::<Vec<Vec<Vec<f32>>>>().unwrap(),
+        X: mlp_string.X.parse::<Vec<Vec<f32>>>().unwrap(),
+        deltas: mlp_string.deltas.parse::<Vec<Vec<f32>>>().unwrap(),
+    };
 
     if inputs.len() != mlp.d[0] {
         println!("Erreur : la taille des entrées ne correspond pas au nombre de neurones de la première couche.");
-        return NULL;
+        return String::from("");
     }
 
-    mlp = propagate(mlp, inputs, is_classification);
+    propagate(mlp, inputs, is_classification);
     let outputs = &mlp.X[mlp.L];
     output.copy_from_slice(&outputs.iter().map(|&x| x as f32).collect::<Vec<f32>>().as_slice());
      // Pas besoin de retourner une valeur car `output` est déjà modifié en place
+    serde_json::to_string(&mlp).unwrap()
 }
 
 #[no_mangle]
-extern "C" fn train(mlp: &mut MLP, samples_inputs: &[f32], samples_expected_outputs: &[f32],
+extern "C" fn train(mlp_string: String, samples_inputs: &[f32], samples_expected_outputs: &[f32],
     samples_size: usize, inputs_size: usize, outputs_size: usize,
-    is_classification: bool, iteration_count: usize, alpha: f32) {
+    is_classification: bool, iteration_count: usize, alpha: f32) -> String {
+    let &mut mlp = MLP {
+        L: mlp_string.L.parse::<usize>().unwrap(),
+        d: mlp_string.d.parse::<Vec<usize>>().unwrap(),
+        W: mlp_string.W.parse::<Vec<Vec<Vec<f32>>>>().unwrap(),
+        X: mlp_string.X.parse::<Vec<Vec<f32>>>().unwrap(),
+        deltas: mlp_string.deltas.parse::<Vec<Vec<f32>>>().unwrap(),
+    };
     let mut loss = 0.0;
     let mut accuracy = 0.0;
     for i in 0..iteration_count {
@@ -123,8 +147,9 @@ extern "C" fn train(mlp: &mut MLP, samples_inputs: &[f32], samples_expected_outp
             accuracy = 0.0;
         }
     }
-
-    save_model(mlp);
+    let nlp = serde_json::to_string(&mlp).unwrap();
+    save_model(nlp);
+    serde_json::to_string(&mlp).unwrap()
 }
 
 #[no_mangle]
@@ -191,11 +216,19 @@ extern "C" fn load_model() -> Option<Box<MLP>> {
         X[i] = vec![0.0; d[i] + 1];
     }
 
-    Some(Box::new(MLP { L, d, W, X, deltas: vec![Vec::new(); L] }))
+    let nlp = Some(Box::new(MLP { L, d, W, X, deltas: vec![Vec::new(); L] }));
+    serde_json::to_string(&nlp).unwrap()
 }
 
 #[no_mangle]
-extern "C" fn save_model(mlp: &MLP) {
+extern "C" fn save_model(mlp_string: String) -> String {
+    let &mut mlp = MLP {
+        L: mlp_string.L.parse::<usize>().unwrap(),
+        d: mlp_string.d.parse::<Vec<usize>>().unwrap(),
+        W: mlp_string.W.parse::<Vec<Vec<Vec<f32>>>>().unwrap(),
+        X: mlp_string.X.parse::<Vec<Vec<f32>>>().unwrap(),
+        deltas: mlp_string.deltas.parse::<Vec<Vec<f32>>>().unwrap(),
+    };
     if let Ok(mut file) = File::create("model.txt") {
         file.write_all(mlp.L.to_string().as_bytes()).unwrap();
         file.write_all(b"\n").unwrap();
@@ -218,6 +251,7 @@ extern "C" fn save_model(mlp: &MLP) {
     } else {
         println!("Erreur lors de l'ouverture du fichier model.txt");
     }
+    serde_json::to_string(&mlp).unwrap()
 }
 
 #[test]

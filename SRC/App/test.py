@@ -13,7 +13,12 @@ pixels = preprocess_image(r"C:\Users\marin\Documents\3IABD\PA\Projet-Annuel-3-Bi
 test_expected = expected_image(r"C:\Users\marin\Documents\3IABD\PA\Projet-Annuel-3-Big-Data\Dataset\Train", FRUITS)
 test_pixels = preprocess_image(r"C:\Users\marin\Documents\3IABD\PA\Projet-Annuel-3-Big-Data\Dataset\Train")
 
-mlp = myMLP([32 * 32 * 3, 10, 4])  # Création d'une instance du modèle MLP avec les couches spécifiées
+#mlp = myMLP([32 * 32 * 3, 10, 4])  # Création d'une instance du modèle MLP avec les couches spécifiées
+rbf = RBFModel(4, 10, 3)
+rbf.fit(pixels, expected)
+print(rbf.predict(test_pixels[0]))
+print(test_expected[0])
+
 
 # Entraînement du modèle
 train_loss = []
@@ -32,12 +37,13 @@ def calculate_accuracy(predictions, expected_outputs):
     accuracy = correct_count / total_count
     return accuracy
 
-for epoch in range(epochs):
-    mlp.train(pixels, expected, True, epochs, alpha)  # Entraînement du modèle pour une époque
+
+#for epoch in range(epochs):
+#    mlp.train(pixels, expected, True, epochs, alpha)  # Entraînement du modèle pour une époque
 
     # Calcul du loss d'apprentissage et de validation
-    train_loss.append(mlp._calculate_loss(pixels, expected, True))
-    test_loss.append(mlp._calculate_loss(test_pixels, test_expected, True))
+ #   train_loss.append(mlp._calculate_loss(pixels, expected, True))
+  #  test_loss.append(mlp._calculate_loss(test_pixels, test_expected, True))
 
     # afficher le pourcentage d'erreur pour chaque epoch pour le train et le test
     """
@@ -58,14 +64,16 @@ for epoch in range(epochs):
 
 
 # Affichage du graphique du loss
-plt.plot(range(epochs), train_loss, label='Training Loss')
+"""plt.plot(range(epochs), train_loss, label='Training Loss')
 plt.plot(range(epochs), test_loss, label='Test Loss')
 plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.title('Training and Validation Loss')
 plt.legend()
-plt.show()
+plt.show()"""
 
+
+"""
 # prédiction pour une image
 prediction = mlp.predict(test_pixels[2], True)
 print(prediction)
@@ -82,6 +90,7 @@ print(test_expected[70])
 prediction = mlp.predict(test_pixels[52], True)
 print(prediction)
 print(test_expected[52])
+"""
 
 
 
